@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
@@ -18,9 +19,10 @@ var (
 		},
 	}
 
-	// Массив подключённых клиентов
-	clients = make(map[*websocket.Conn]bool)
-	mu      sync.Mutex
+	// Хранилище клиентов с UUID ключами
+	clients2   = make(map[string]*websocket.Conn) // UUID -> соединение
+	clientIDs  = make(map[*websocket.Conn]string) // соединение -> UUID
+	mu         sync.Mutex
 )
 
 func main() {
@@ -60,14 +62,16 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// Генерируем уникальный UUID для клиента
+	clientUUID := uuid.New().String()
+
 	// Регистрируем нового клиента
 	mu.Lock()
-	clients[conn] = true
+	clients2[clientUUID] = conn
+	clientIDs[conn] = clientUUID
 	mu.Unlock()
 
-	log.Printf("Новое подключение: %s", r.RemoteAddr)
-
-	// выведи к консоль id клиента, которое можно сохранить в базе данных и удалить при отключении
+	log.Printf("Новое подключение: %s, UUID: %s", r.RemoteAddr, clientUUID)
 
 	// Отправляем приветственное сообщение
 	conn.WriteMessage(websocket.TextMessage, []byte("Добро пожаловать в чат!"))
@@ -96,7 +100,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Удаляем клиента при отключении
 	mu.Lock()
-	delete(clients, conn)
+	if uuid, ok := clientIDs[conn]; ok {
+		delete(clients2, uuid)
+		delete(clientIDs, conn)
+	}
 	mu.Unlock()
 
 	log.Printf("Отключение: %s", r.RemoteAddr)
@@ -109,7 +116,7 @@ func broadcast(message []byte, exclude *websocket.Conn) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	for client := range clients {
+	for uuid, client := range clients2 {
 		if client == exclude {
 			continue
 		}
@@ -117,7 +124,8 @@ func broadcast(message []byte, exclude *websocket.Conn) {
 		if err != nil {
 			log.Printf("Ошибка отправки: %v", err)
 			client.Close()
-			delete(clients, client)
+			delete(clients2, uuid)
+			delete(clientIDs, client)
 		}
 	}
 }
