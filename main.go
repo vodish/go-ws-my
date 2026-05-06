@@ -95,4 +95,3 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Рассылаем уведомление об отключении
 	clientStore.Broadcast([]byte("Пользователь покинул чат"), nil)
 }
-
