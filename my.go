@@ -20,7 +20,7 @@ type My struct {
 // Если переменная не установлена, возвращается пустая строка.
 func EnvDB() (username, password, host, port, database string) {
 	username = os.Getenv("DB_USER")
-	password = os.Getenv("DB_PASSWORD")
+	password = os.Getenv("DB_PASS")
 	host = os.Getenv("DB_HOST")
 	port = os.Getenv("DB_PORT")
 	database = os.Getenv("DB_NAME")
