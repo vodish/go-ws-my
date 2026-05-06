@@ -24,7 +24,7 @@ func ExampleWithCredentials() {
 func ExampleWithEnv() {
 	// Установим переменные окружения для демонстрации (в реальном приложении они задаются в .env)
 	os.Setenv("DB_USER", "root")
-	os.Setenv("DB_PASSWORD", "password")
+	os.Setenv("DB_PASS", "password")
 	os.Setenv("DB_HOST", "localhost")
 	os.Setenv("DB_PORT", "3306")
 	os.Setenv("DB_NAME", "testdb")

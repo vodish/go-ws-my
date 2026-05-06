@@ -16,7 +16,7 @@ type My struct {
 }
 
 // EnvDB возвращает параметры подключения к MySQL из переменных окружения.
-// Используются переменные: DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME.
+// Используются переменные: DB_USER, DB_PASS, DB_HOST, DB_PORT, DB_NAME.
 // Если переменная не установлена, возвращается пустая строка.
 func EnvDB() (username, password, host, port, database string) {
 	username = os.Getenv("DB_USER")

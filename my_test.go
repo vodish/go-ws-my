@@ -11,7 +11,7 @@ import (
 func TestEnvDB(t *testing.T) {
 	// Сохраняем текущие значения переменных окружения
 	oldUser := os.Getenv("DB_USER")
-	oldPass := os.Getenv("DB_PASSWORD")
+	oldPass := os.Getenv("DB_PASS")
 	oldHost := os.Getenv("DB_HOST")
 	oldPort := os.Getenv("DB_PORT")
 	oldDB := os.Getenv("DB_NAME")
@@ -19,7 +19,7 @@ func TestEnvDB(t *testing.T) {
 	// Восстанавливаем после теста
 	defer func() {
 		os.Setenv("DB_USER", oldUser)
-		os.Setenv("DB_PASSWORD", oldPass)
+		os.Setenv("DB_PASS", oldPass)
 		os.Setenv("DB_HOST", oldHost)
 		os.Setenv("DB_PORT", oldPort)
 		os.Setenv("DB_NAME", oldDB)
@@ -27,7 +27,7 @@ func TestEnvDB(t *testing.T) {
 
 	// Устанавливаем тестовые значения
 	os.Setenv("DB_USER", "testuser")
-	os.Setenv("DB_PASSWORD", "testpass")
+	os.Setenv("DB_PASS", "testpass")
 	os.Setenv("DB_HOST", "testhost")
 	os.Setenv("DB_PORT", "3307")
 	os.Setenv("DB_NAME", "testdb")
@@ -38,7 +38,7 @@ func TestEnvDB(t *testing.T) {
 		t.Errorf("DB_USER ожидается 'testuser', получено '%s'", user)
 	}
 	if pass != "testpass" {
-		t.Errorf("DB_PASSWORD ожидается 'testpass', получено '%s'", pass)
+		t.Errorf("DB_PASS ожидается 'testpass', получено '%s'", pass)
 	}
 	if host != "testhost" {
 		t.Errorf("DB_HOST ожидается 'testhost', получено '%s'", host)
@@ -80,14 +80,14 @@ func TestNewMyWithInvalidCredentials(t *testing.T) {
 func TestNewMyWithEmptyParams(t *testing.T) {
 	// Сохраняем текущие значения
 	oldUser := os.Getenv("DB_USER")
-	oldPass := os.Getenv("DB_PASSWORD")
+	oldPass := os.Getenv("DB_PASS")
 	oldHost := os.Getenv("DB_HOST")
 	oldPort := os.Getenv("DB_PORT")
 	oldDB := os.Getenv("DB_NAME")
 
 	defer func() {
 		os.Setenv("DB_USER", oldUser)
-		os.Setenv("DB_PASSWORD", oldPass)
+		os.Setenv("DB_PASS", oldPass)
 		os.Setenv("DB_HOST", oldHost)
 		os.Setenv("DB_PORT", oldPort)
 		os.Setenv("DB_NAME", oldDB)
@@ -95,7 +95,7 @@ func TestNewMyWithEmptyParams(t *testing.T) {
 
 	// Очищаем переменные окружения
 	os.Unsetenv("DB_USER")
-	os.Unsetenv("DB_PASSWORD")
+	os.Unsetenv("DB_PASS")
 	os.Unsetenv("DB_HOST")
 	os.Unsetenv("DB_PORT")
 	os.Unsetenv("DB_NAME")
@@ -185,8 +185,8 @@ func TestIsDecimalNumber(t *testing.T) {
 		{"12a34", false},
 		{"--123", false},
 		{"++123", false},
-		{".123", true},  // точка в начале допустима (0.123)
-		{"123.", true},  // точка в конце допустима (123.0)
+		{".123", true}, // точка в начале допустима (0.123)
+		{"123.", true}, // точка в конце допустима (123.0)
 	}
 
 	for _, tc := range testCases {
@@ -208,7 +208,7 @@ func TestConnectionError(t *testing.T) {
 		t.Logf("Ошибка при sql.Open: %v", err)
 		return
 	}
-	
+
 	// Ping должен вернуть ошибку
 	err = db.Ping()
 	if err != nil {
