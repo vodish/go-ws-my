@@ -5,9 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
@@ -19,10 +17,8 @@ var (
 		},
 	}
 
-	// Хранилище клиентов с UUID ключами
-	clients2   = make(map[string]*websocket.Conn) // UUID -> соединение
-	clientIDs  = make(map[*websocket.Conn]string) // соединение -> UUID
-	mu         sync.Mutex
+	// Глобальное хранилище клиентов
+	clientStore = NewClientStore()
 )
 
 func main() {
@@ -62,14 +58,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Генерируем уникальный UUID для клиента
-	clientUUID := uuid.New().String()
-
-	// Регистрируем нового клиента
-	mu.Lock()
-	clients2[clientUUID] = conn
-	clientIDs[conn] = clientUUID
-	mu.Unlock()
+	// Регистрируем нового клиента в хранилище
+	clientUUID := clientStore.Add(conn)
 
 	log.Printf("Новое подключение: %s, UUID: %s", r.RemoteAddr, clientUUID)
 
@@ -77,7 +67,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn.WriteMessage(websocket.TextMessage, []byte("Добро пожаловать в чат!"))
 
 	// Рассылаем уведомление о новом пользователе всем клиентам
-	broadcast([]byte("Пользователь присоединился к чату"), conn)
+	clientStore.Broadcast([]byte("Пользователь присоединился к чату"), conn)
 
 	// Читаем сообщения от клиента
 	for {
@@ -90,7 +80,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Получено сообщение от %s: %s", r.RemoteAddr, string(p))
 
 		// Рассылаем сообщение всем клиентам, кроме отправителя
-		broadcast(p, conn)
+		clientStore.Broadcast(p, conn)
 
 		// Эхо-ответ (опционально)
 		if messageType == websocket.TextMessage {
@@ -99,33 +89,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Удаляем клиента при отключении
-	mu.Lock()
-	if uuid, ok := clientIDs[conn]; ok {
-		delete(clients2, uuid)
-		delete(clientIDs, conn)
-	}
-	mu.Unlock()
+	clientStore.Remove(conn)
 
 	log.Printf("Отключение: %s", r.RemoteAddr)
 	// Рассылаем уведомление об отключении
-	broadcast([]byte("Пользователь покинул чат"), nil)
+	clientStore.Broadcast([]byte("Пользователь покинул чат"), nil)
 }
 
-// broadcast отправляет сообщение всем подключённым клиентам, кроме исключённого
-func broadcast(message []byte, exclude *websocket.Conn) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	for uuid, client := range clients2 {
-		if client == exclude {
-			continue
-		}
-		err := client.WriteMessage(websocket.TextMessage, message)
-		if err != nil {
-			log.Printf("Ошибка отправки: %v", err)
-			client.Close()
-			delete(clients2, uuid)
-			delete(clientIDs, client)
-		}
-	}
-}
