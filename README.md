@@ -57,9 +57,39 @@ go run main.go
 - `GET /` — обслуживает статический файл `index.html`
 - `GET /ws` — WebSocket endpoint для обмена сообщениями
 
+## Тестирование
+
+Проект включает unit-тесты для проверки подключения к БД и работы хранилища клиентов.
+
+### Запуск всех тестов
+```bash
+go test ./...
+```
+
+### Запуск с подробным выводом
+```bash
+go test -v ./...
+```
+
+### Тесты подключения к MySQL
+Тесты используют переменные окружения для подключения к БД. Если MySQL сервер не доступен, тесты будут пропущены.
+
+Для запуска интеграционных тестов с реальной БД установите переменную окружения:
+```bash
+export TEST_MYSQL_DSN="user:password@tcp(localhost:3306)/database"
+go test -v -run TestMySQLIntegration
+```
+
+### Покрытие тестами
+- `my_test.go` — тесты подключения к БД и методов работы с MySQL
+- `client_store_test.go` — тесты хранилища WebSocket-клиентов
+
 ## Зависимости
 
 - [gorilla/websocket](https://github.com/gorilla/websocket) — реализация WebSocket для Go
+- [go-sql-driver/mysql](https://github.com/go-sql-driver/mysql) — драйвер MySQL для Go
+- [joho/godotenv](https://github.com/joho/godotenv) — загрузка переменных окружения из .env файла
+- [google/uuid](https://github.com/google/uuid) — генерация UUID
 
 ## Лицензия
 
