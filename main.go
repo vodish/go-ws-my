@@ -19,6 +19,9 @@ var (
 
 	// Глобальное хранилище клиентов
 	clientStore = NewClientStore()
+
+	// Глобальное подключение к БД
+	my *My
 )
 
 func main() {
@@ -27,6 +30,13 @@ func main() {
 	if err != nil {
 		log.Println("Не удалось загрузить .env файл, используем переменные окружения системы")
 	}
+
+	// Инициализируем подключение к БД
+	my, err = NewMyEnv()
+	if err != nil {
+		log.Fatalf("Ошибка подключения к БД: %v", err)
+	}
+	defer my.Close()
 
 	// Получаем порт из переменной окружения
 	port := os.Getenv("PORT")
