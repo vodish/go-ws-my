@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -266,6 +267,151 @@ func TestAccessDeniedError(t *testing.T) {
 		t.Skipf("Ошибка Ping не является ошибкой доступа: %v", errMsg)
 	} else {
 		t.Skip("Подключение успешно (возможно, пользователь kfe существует без пароля)")
+	}
+}
+
+// TestExampleWithCredentials проверяет подключение с явными параметрами (на основе ExampleWithCredentials)
+func TestExampleWithCredentials(t *testing.T) {
+	// Пропускаем тест, если нет реальной БД для тестирования
+	if os.Getenv("TEST_DB_AVAILABLE") != "true" && os.Getenv("TEST_MYSQL_DSN") == "" {
+		t.Skip("Пропускаем тест подключения с явными параметрами, так как TEST_DB_AVAILABLE не установлен и TEST_MYSQL_DSN пуст")
+	}
+
+	// Если задан TEST_MYSQL_DSN, используем его для создания подключения
+	if dsn := os.Getenv("TEST_MYSQL_DSN"); dsn != "" {
+		my, err := NewMyFromDSN(dsn)
+		if err != nil {
+			t.Fatalf("Не удалось подключиться к БД по DSN: %v", err)
+		}
+		defer my.Close()
+		t.Log("Подключение через DSN успешно")
+		return
+	}
+
+	// Иначе используем параметры из окружения (как в оригинальном примере)
+	user := os.Getenv("DB_USER")
+	pass := os.Getenv("DB_PASS")
+	host := os.Getenv("DB_HOST")
+	port := os.Getenv("DB_PORT")
+	dbname := os.Getenv("DB_NAME")
+
+	if user == "" || host == "" || dbname == "" {
+		t.Skip("Пропускаем тест: не заданы DB_USER, DB_HOST или DB_NAME")
+	}
+
+	my, err := NewMy(user, pass, host, port, dbname)
+	if err != nil {
+		t.Fatalf("Ошибка подключения к БД с явными параметрами: %v", err)
+	}
+	defer my.Close()
+
+	t.Log("Подключение с явными параметрами успешно")
+}
+
+// TestExampleWithEnv проверяет работу с переменными окружения (на основе ExampleWithEnv)
+func TestExampleWithEnv(t *testing.T) {
+	// Пропускаем тест, если нет реальной БД для тестирования
+	if os.Getenv("TEST_DB_AVAILABLE") != "true" && os.Getenv("TEST_MYSQL_DSN") == "" {
+		t.Skip("Пропускаем тест работы с переменными окружения, так как TEST_DB_AVAILABLE не установлен и TEST_MYSQL_DSN пуст")
+	}
+
+	// Сохраняем текущие значения переменных окружения
+	oldUser := os.Getenv("DB_USER")
+	oldPass := os.Getenv("DB_PASS")
+	oldHost := os.Getenv("DB_HOST")
+	oldPort := os.Getenv("DB_PORT")
+	oldDB := os.Getenv("DB_NAME")
+
+	// Восстанавливаем после теста
+	defer func() {
+		os.Setenv("DB_USER", oldUser)
+		os.Setenv("DB_PASS", oldPass)
+		os.Setenv("DB_HOST", oldHost)
+		os.Setenv("DB_PORT", oldPort)
+		os.Setenv("DB_NAME", oldDB)
+	}()
+
+	// Устанавливаем тестовые переменные окружения
+	os.Setenv("DB_USER", "testuser")
+	os.Setenv("DB_PASS", "testpass")
+	os.Setenv("DB_HOST", "testhost")
+	os.Setenv("DB_PORT", "3306")
+	os.Setenv("DB_NAME", "testdb")
+
+	// Способ 1: Использование NewMyEnv
+	my, err := NewMyEnv()
+	if err != nil {
+		// Ожидаем ошибку, так как тестовые параметры не соответствуют реальной БД
+		t.Logf("Ожидаемая ошибка подключения через NewMyEnv: %v", err)
+	} else {
+		my.Close()
+		t.Log("Подключение через NewMyEnv успешно (если бы БД существовала)")
+	}
+
+	// Способ 2: Использование NewMy с пустыми параметрами
+	my2, err := NewMy("", "", "", "", "")
+	if err != nil {
+		t.Logf("Ожидаемая ошибка подключения через NewMy с пустыми параметрами: %v", err)
+	} else {
+		my2.Close()
+		t.Log("Подключение через NewMy с пустыми параметрами успешно (если бы БД существовала)")
+	}
+
+	// Проверяем функцию EnvDB
+	user, pass, host, port, db := EnvDB()
+	if user != "testuser" || pass != "testpass" || host != "testhost" || port != "3306" || db != "testdb" {
+		t.Errorf("EnvDB вернула неожиданные значения: user=%s, pass=%s, host=%s, port=%s, db=%s",
+			user, pass, host, port, db)
+	}
+
+	// Если есть реальная БД для тестирования, выполняем дополнительные проверки
+	if os.Getenv("TEST_DB_AVAILABLE") == "true" || os.Getenv("TEST_MYSQL_DSN") != "" {
+		var testMy *My
+		var err error
+
+		if dsn := os.Getenv("TEST_MYSQL_DSN"); dsn != "" {
+			testMy, err = NewMyFromDSN(dsn)
+		} else {
+			// Используем реальные параметры из окружения (не тестовые)
+			os.Setenv("DB_USER", oldUser)
+			os.Setenv("DB_PASS", oldPass)
+			os.Setenv("DB_HOST", oldHost)
+			os.Setenv("DB_PORT", oldPort)
+			os.Setenv("DB_NAME", oldDB)
+			testMy, err = NewMyEnv()
+		}
+
+		if err != nil {
+			t.Skipf("Не удалось подключиться к реальной БД для дополнительных проверок: %v", err)
+		}
+		defer testMy.Close()
+
+		// Демонстрация работы с БД (как в оригинальном примере)
+		createTable := `
+		CREATE TABLE IF NOT EXISTS example_test (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			message VARCHAR(255)
+		)`
+		if testMy.Exe(createTable) {
+			t.Log("Таблица создана или уже существует")
+		}
+
+		// Вставка данных
+		insertQuery := fmt.Sprintf("INSERT INTO example_test (message) VALUES (%s)", testMy.V("Привет, мир!"))
+		if testMy.Exe(insertQuery) {
+			t.Log("Данные вставлены, ID:", testMy.LastID())
+		}
+
+		// Выборка
+		row := testMy.One("SELECT * FROM example_test LIMIT 1")
+		t.Log("Первая запись:", row)
+
+		// Экранирование
+		t.Log("Экранирование строки:", testMy.V("O'Reilly"))
+		t.Log("Экранирование числа:", testMy.V(42))
+
+		// Очистка
+		testMy.Exe("DROP TABLE IF EXISTS example_test")
 	}
 }
 
