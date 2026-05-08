@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+__debug
 
 # Test binary, built with `go test -c`
 *.test
@@ -30,7 +31,6 @@ go.work
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
 Thumbs.db
 
 # Temporary files
