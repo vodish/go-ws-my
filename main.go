@@ -18,7 +18,7 @@ var (
 	}
 
 	// Глобальное хранилище клиентов
-	clientStore = NewClientStore()
+	ws = NewWsStore()
 
 	// Глобальное подключение к БД
 	my *My
@@ -70,14 +70,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Регистрируем нового клиента в хранилище
-	cid := clientStore.Add(conn)
+	cid := ws.Add(conn)
 	log.Printf("Новое подключение: %s, UUID: %s", r.RemoteAddr, cid)
 
 	// Отправляем приветственное сообщение
 	conn.WriteMessage(websocket.TextMessage, []byte("Добро пожаловать в чат!"))
 
 	// Рассылаем уведомление о новом пользователе всем клиентам
-	clientStore.Broadcast([]byte("Пользователь присоединился к чату"), conn)
+	ws.Broadcast([]byte("Пользователь присоединился к чату"), conn)
 
 	// Читаем сообщения от клиента
 	for {
@@ -90,7 +90,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Получено сообщение от %s: %s", r.RemoteAddr, string(p))
 
 		// Рассылаем сообщение всем клиентам, кроме отправителя
-		clientStore.Broadcast(p, conn)
+		ws.Broadcast(p, conn)
 
 		// Эхо-ответ (опционально)
 		if messageType == websocket.TextMessage {
@@ -99,9 +99,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Удаляем клиента при отключении
-	clientStore.Remove(conn)
+	ws.Remove(conn)
 
 	log.Printf("Отключение: %s", r.RemoteAddr)
 	// Рассылаем уведомление об отключении
-	clientStore.Broadcast([]byte("Пользователь покинул чат"), nil)
+	ws.Broadcast([]byte("Пользователь покинул чат"), nil)
 }

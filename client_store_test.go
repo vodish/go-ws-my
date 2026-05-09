@@ -8,7 +8,7 @@ import (
 
 // TestNewClientStore проверяет создание нового хранилища клиентов
 func TestNewClientStore(t *testing.T) {
-	store := NewClientStore()
+	store := NewWsStore()
 	if store == nil {
 		t.Error("NewClientStore вернул nil")
 	}
@@ -19,7 +19,7 @@ func TestNewClientStore(t *testing.T) {
 
 // TestAddAndRemove проверяет добавление и удаление клиентов
 func TestAddAndRemove(t *testing.T) {
-	store := NewClientStore()
+	store := NewWsStore()
 
 	// Создаем мок соединение
 	conn := &websocket.Conn{}
@@ -88,7 +88,7 @@ func TestSendToMultiple(t *testing.T) {
 
 // TestCountAndGetAll проверяет методы Count, GetAllUUIDs, GetAllConns
 func TestCountAndGetAll(t *testing.T) {
-	store := NewClientStore()
+	store := NewWsStore()
 
 	// Проверяем пустое хранилище
 	if store.Count() != 0 {
@@ -142,7 +142,7 @@ func TestCountAndGetAll(t *testing.T) {
 
 // TestConcurrentAccess проверяет потокобезопасность (базовая проверка)
 func TestConcurrentAccess(t *testing.T) {
-	store := NewClientStore()
+	store := NewWsStore()
 	done := make(chan bool)
 
 	// Горутина для добавления клиентов
