@@ -12,16 +12,16 @@ import (
 // WsStore хранит отображения между UUID и WebSocket соединениями
 // и обеспечивает потокобезопасный доступ.
 type WsStore struct {
-	mu        sync.RWMutex
-	clients   map[string]*websocket.Conn // UUID -> соединение
-	clientIDs map[*websocket.Conn]string // соединение -> UUID
+	mu   sync.RWMutex
+	bots map[string]*websocket.Conn // [uuid]conn
+	conn map[*websocket.Conn]string // [conn]uuid
 }
 
 // NewWsStore создаёт новый экземпляр WsStore.
 func NewWsStore() *WsStore {
 	return &WsStore{
-		clients:   make(map[string]*websocket.Conn),
-		clientIDs: make(map[*websocket.Conn]string),
+		bots: make(map[string]*websocket.Conn),
+		conn: make(map[*websocket.Conn]string),
 	}
 }
 
@@ -30,10 +30,10 @@ func (ws *WsStore) Add(conn *websocket.Conn) string {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	clientUUID := uuid.New().String()
-	ws.clients[clientUUID] = conn
-	ws.clientIDs[conn] = clientUUID
-	return clientUUID
+	uuid := uuid.New().String()
+	ws.bots[uuid] = conn
+	ws.conn[conn] = uuid
+	return uuid
 }
 
 // Remove удаляет соединение из хранилища по указателю на соединение.
@@ -41,9 +41,9 @@ func (ws *WsStore) Remove(conn *websocket.Conn) {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	if uuid, ok := ws.clientIDs[conn]; ok {
-		delete(ws.clients, uuid)
-		delete(ws.clientIDs, conn)
+	if uuid, ok := ws.conn[conn]; ok {
+		delete(ws.bots, uuid)
+		delete(ws.conn, conn)
 	}
 }
 
@@ -52,9 +52,9 @@ func (ws *WsStore) RemoveByUUID(uuid string) {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 
-	if conn, ok := ws.clients[uuid]; ok {
-		delete(ws.clients, uuid)
-		delete(ws.clientIDs, conn)
+	if conn, ok := ws.bots[uuid]; ok {
+		delete(ws.bots, uuid)
+		delete(ws.conn, conn)
 	}
 }
 
@@ -63,7 +63,7 @@ func (ws *WsStore) GetConn(uuid string) (*websocket.Conn, bool) {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
-	conn, ok := ws.clients[uuid]
+	conn, ok := ws.bots[uuid]
 	return conn, ok
 }
 
@@ -72,7 +72,7 @@ func (ws *WsStore) GetUUID(conn *websocket.Conn) (string, bool) {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
-	uuid, ok := ws.clientIDs[conn]
+	uuid, ok := ws.conn[conn]
 	return uuid, ok
 }
 
@@ -82,7 +82,7 @@ func (ws *WsStore) Broadcast(message []byte, exclude *websocket.Conn) {
 	ws.mu.RLock()
 	// Создаём копию карты для итерации, чтобы не держать блокировку при отправке
 	clientsCopy := make(map[string]*websocket.Conn)
-	for u, c := range ws.clients {
+	for u, c := range ws.bots {
 		clientsCopy[u] = c
 	}
 	ws.mu.RUnlock()
@@ -100,11 +100,11 @@ func (ws *WsStore) Broadcast(message []byte, exclude *websocket.Conn) {
 	}
 }
 
-// SendToUUID отправляет сообщение конкретному клиенту по UUID.
+// Отправляет сообщение конкретному клиенту по UUID.
 // Возвращает ошибку, если клиент не найден или произошла ошибка отправки.
-func (ws *WsStore) SendToUUID(uuid string, message []byte) error {
+func (ws *WsStore) SendBot(uuid string, message []byte) error {
 	ws.mu.RLock()
-	client, ok := ws.clients[uuid]
+	client, ok := ws.bots[uuid]
 	ws.mu.RUnlock()
 
 	if !ok {
@@ -122,13 +122,13 @@ func (ws *WsStore) SendToUUID(uuid string, message []byte) error {
 	return nil
 }
 
-// SendToMultiple отправляет сообщения нескольким клиентам, переданным в карте UUID -> сообщение.
-func (ws *WsStore) SendToMultiple(clients map[string][]byte) {
+// Отправляет сообщения нескольким клиентам, переданным в карте UUID -> сообщение.
+func (ws *WsStore) SendBots(clients map[string][]byte) {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
 	for uuid, message := range clients {
-		client, ok := ws.clients[uuid]
+		client, ok := ws.bots[uuid]
 		if !ok {
 			log.Printf("Клиент с UUID %s не найден", uuid)
 			continue
@@ -145,33 +145,33 @@ func (ws *WsStore) SendToMultiple(clients map[string][]byte) {
 	}
 }
 
-// Count возвращает количество активных клиентов.
+// Возвращает количество активных клиентов.
 func (ws *WsStore) Count() int {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
-	return len(ws.clients)
+	return len(ws.bots)
 }
 
-// GetAllUUIDs возвращает слайс всех UUID активных клиентов.
-func (ws *WsStore) GetAllUUIDs() []string {
+// Возвращает слайс всех UUID активных клиентов.
+func (ws *WsStore) GetAllBots() []string {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
-	uuids := make([]string, 0, len(ws.clients))
-	for u := range ws.clients {
+	uuids := make([]string, 0, len(ws.bots))
+	for u := range ws.bots {
 		uuids = append(uuids, u)
 	}
 	return uuids
 }
 
-// GetAllConns возвращает слайс всех активных соединений.
+// Возвращает слайс всех активных соединений.
 func (ws *WsStore) GetAllConns() []*websocket.Conn {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
 
-	conns := make([]*websocket.Conn, 0, len(ws.clients))
-	for _, c := range ws.clients {
+	conns := make([]*websocket.Conn, 0, len(ws.bots))
+	for _, c := range ws.bots {
 		conns = append(conns, c)
 	}
 	return conns

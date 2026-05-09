@@ -94,7 +94,7 @@ func TestCountAndGetAll(t *testing.T) {
 	if store.Count() != 0 {
 		t.Errorf("Пустое хранилище: Count() = %d, ожидается 0", store.Count())
 	}
-	if len(store.GetAllUUIDs()) != 0 {
+	if len(store.GetAllBots()) != 0 {
 		t.Error("GetAllUUIDs должен возвращать пустой слайс для пустого хранилища")
 	}
 	if len(store.GetAllConns()) != 0 {
@@ -113,7 +113,7 @@ func TestCountAndGetAll(t *testing.T) {
 	}
 
 	// Проверяем GetAllUUIDs
-	uuids := store.GetAllUUIDs()
+	uuids := store.GetAllBots()
 	if len(uuids) != 2 {
 		t.Errorf("GetAllUUIDs вернул %d UUID, ожидается 2", len(uuids))
 	}
