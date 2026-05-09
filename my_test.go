@@ -147,14 +147,14 @@ func TestMyMethods(t *testing.T) {
 	}
 
 	// Проверяем метод V (экранирование)
-	if my.V("test") != "'test'" {
-		t.Errorf("Некорректное экранирование строки: %s", my.V("test"))
+	if my.escapeValue("test") != "'test'" {
+		t.Errorf("Некорректное экранирование строки: %s", my.escapeValue("test"))
 	}
-	if my.V(123) != "123" {
-		t.Errorf("Некорректное экранирование числа: %s", my.V(123))
+	if my.escapeValue(123) != "123" {
+		t.Errorf("Некорректное экранирование числа: %s", my.escapeValue(123))
 	}
-	if my.V("O'Reilly") != "'O''Reilly'" {
-		t.Errorf("Некорректное экранирование строки с апострофом: %s", my.V("O'Reilly"))
+	if my.escapeValue("O'Reilly") != "'O''Reilly'" {
+		t.Errorf("Некорректное экранирование строки с апострофом: %s", my.escapeValue("O'Reilly"))
 	}
 
 	// Проверяем метод LastID (должен вернуть 0, если не было INSERT)
@@ -191,7 +191,7 @@ func TestIsDecimalNumber(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result := my.isDecimalNumber(tc.input)
+		result := my.isDecimal(tc.input)
 		if result != tc.expected {
 			t.Errorf("isDecimalNumber(%q) = %v, ожидается %v", tc.input, result, tc.expected)
 		}
@@ -397,7 +397,7 @@ func TestExampleWithEnv(t *testing.T) {
 		}
 
 		// Вставка данных
-		insertQuery := fmt.Sprintf("INSERT INTO example_test (message) VALUES (%s)", testMy.V("Привет, мир!"))
+		insertQuery := fmt.Sprintf("INSERT INTO example_test (message) VALUES (%s)", testMy.escapeValue("Привет, мир!"))
 		if testMy.Exe(insertQuery) {
 			t.Log("Данные вставлены, ID:", testMy.LastID())
 		}
@@ -407,8 +407,8 @@ func TestExampleWithEnv(t *testing.T) {
 		t.Log("Первая запись:", row)
 
 		// Экранирование
-		t.Log("Экранирование строки:", testMy.V("O'Reilly"))
-		t.Log("Экранирование числа:", testMy.V(42))
+		t.Log("Экранирование строки:", testMy.escapeValue("O'Reilly"))
+		t.Log("Экранирование числа:", testMy.escapeValue(42))
 
 		// Очистка
 		testMy.Exe("DROP TABLE IF EXISTS example_test")

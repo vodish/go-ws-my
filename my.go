@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -15,7 +16,9 @@ type My struct {
 	db *sql.DB
 }
 
-// EnvDB возвращает параметры подключения к MySQL из переменных окружения.
+type MV = map[string]any
+
+// Возвращает параметры подключения к MySQL из переменных окружения.
 // Используются переменные: DB_USER, DB_PASS, DB_HOST, DB_PORT, DB_NAME.
 // Если переменная не установлена, возвращается пустая строка.
 func EnvDB() (username, password, host, port, database string) {
@@ -27,7 +30,7 @@ func EnvDB() (username, password, host, port, database string) {
 	return
 }
 
-// NewMy создаёт новое подключение к MySQL и возвращает экземпляр My.
+// Создаёт новое подключение к MySQL и возвращает экземпляр My.
 // Параметры: username, password, host, port, database.
 // Если все пять параметров пусты, используются значения из переменных окружения (EnvDB).
 func NewMy(username, password, host, port, database string) (*My, error) {
@@ -48,14 +51,14 @@ func NewMy(username, password, host, port, database string) (*My, error) {
 	return &My{db: db}, nil
 }
 
-// NewMyEnv создаёт подключение к MySQL, используя параметры из переменных окружения.
+// Создаёт подключение к MySQL, используя параметры из переменных окружения.
 // Вызывает EnvDB для получения параметров, затем NewMy.
 func NewMyEnv() (*My, error) {
 	username, password, host, port, database := EnvDB()
 	return NewMy(username, password, host, port, database)
 }
 
-// NewMyFromDSN создаёт подключение по готовой DSN строке.
+// Создаёт подключение по готовой DSN строке.
 func NewMyFromDSN(dsn string) (*My, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
@@ -67,45 +70,40 @@ func NewMyFromDSN(dsn string) (*My, error) {
 	return &My{db: db}, nil
 }
 
-// Close закрывает соединение с базой данных.
+// Закрывает соединение с базой данных.
 func (my *My) Close() error {
 	return my.db.Close()
 }
 
 // Exe выполняет запрос (INSERT, UPDATE, DELETE) и возвращает true при успехе.
-func (my *My) Exe(q string) bool {
-	_, err := my.db.Exec(q)
+func (my *My) Exe(q string, args ...MV) bool {
+	// Получаем безопасный запрос, параметры и запрос с подставленными значениями
+	sql, params, dbg := my.prepareArgs(q, args)
+
+	// Выполняем безопасный запрос с параметрами
+	_, err := my.db.Exec(sql, params...)
 	if err != nil {
-		logSQL(err, q)
+		logSQL(err, dbg)
 		return false
 	}
 	return true
 }
 
-// LastID возвращает ID последней вставленной записи.
-func (my *My) LastID() int64 {
-	var id int64
-	err := my.db.QueryRow("SELECT LAST_INSERT_ID()").Scan(&id)
-	if err != nil {
-		logSQL(err, "SELECT LAST_INSERT_ID()")
-		return 0
-	}
-	return id
-}
-
 // One выполняет запрос SELECT и возвращает первую строку в виде map[string]string.
 // Если строк нет, возвращает пустую map.
-func (my *My) One(q string) map[string]string {
-	rows, err := my.db.Query(q)
+func (my *My) One(q string, args ...MV) map[string]string {
+	sql, params, dbg := my.prepareArgs(q, args)
+
+	rows, err := my.db.Query(sql, params...)
 	if err != nil {
-		logSQL(err, q)
+		logSQL(err, dbg)
 		return map[string]string{}
 	}
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		logSQL(err, q)
+		logSQL(err, dbg)
 		return map[string]string{}
 	}
 
@@ -121,7 +119,7 @@ func (my *My) One(q string) map[string]string {
 	}
 
 	if err := rows.Scan(valuePtrs...); err != nil {
-		logSQL(err, q)
+		logSQL(err, dbg)
 		return map[string]string{}
 	}
 
@@ -136,19 +134,22 @@ func (my *My) One(q string) map[string]string {
 	return result
 }
 
-// Sel выполняет запрос SELECT и возвращает все строки в виде []map[string]string.
+// Выполняет запрос SELECT и возвращает все строки в виде []map[string]string.
 // Если строк нет, возвращает пустой срез.
-func (my *My) Sel(q string) []map[string]string {
-	rows, err := my.db.Query(q)
+func (my *My) Sel(q string, args ...MV) []map[string]string {
+	// Получаем безопасный запрос, параметры и запрос с подставленными значениями
+	sql, params, dbg := my.prepareArgs(q, args)
+
+	rows, err := my.db.Query(sql, params...)
 	if err != nil {
-		logSQL(err, q)
+		logSQL(err, dbg)
 		return []map[string]string{}
 	}
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		logSQL(err, q)
+		logSQL(err, dbg)
 		return []map[string]string{}
 	}
 
@@ -161,7 +162,7 @@ func (my *My) Sel(q string) []map[string]string {
 		}
 
 		if err := rows.Scan(valuePtrs...); err != nil {
-			logSQL(err, q)
+			logSQL(err, dbg)
 			continue
 		}
 
@@ -176,16 +177,74 @@ func (my *My) Sel(q string) []map[string]string {
 		results = append(results, row)
 	}
 	if err := rows.Err(); err != nil {
-		logSQL(err, q)
+		logSQL(err, dbg)
 	}
 	return results
 }
 
-// V экранирует значение для подстановки в SQL запрос.
+// Возвращает ID последней вставленной записи.
+func (my *My) LastID() int64 {
+	var id int64
+	query := "SELECT LAST_INSERT_ID()"
+	err := my.db.QueryRow(query).Scan(&id)
+	if err != nil {
+		logSQL(err, query)
+		return 0
+	}
+	return id
+}
+
+// Заменяет :name на ?
+// и собирает значения в срез
+// и версию запроса для отладки
+func (my *My) prepareArgs(query string, args []map[string]any) (string, []any, string) {
+	if len(args) == 0 || len(args[0]) == 0 {
+		return query, []any{}, query
+	}
+
+	// безопасный запрос с ? для выполнения
+	// срез обработанных значений для передачи в Exec
+	// финальный запрос с подставленными значениями для логирования
+	sql := query
+	var params []any
+	dbg := query
+
+	// Сортируем ключи карты для предсказуемого порядка обработки
+	keys := make([]string, 0, len(args[0]))
+	for key := range args[0] {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	// Обрабатываем каждый ключ и заменяем плейсхолдеры
+	for _, key := range keys {
+		placeholder := ":" + key
+
+		// Проверяем, есть ли плейсхолдер в запросе
+		if strings.Contains(sql, placeholder) {
+			// Получаем исходное значение из карты
+			prm_v := args[0][key]
+
+			// Заменяем плейсхолдер на ? в safeQuery
+			// Добавляем исходное значение в срез params для безопасного выполнения
+			sql = strings.ReplaceAll(sql, placeholder, "?")
+			params = append(params, prm_v)
+
+			// Обрабатываем значение через метод V для финального запроса
+			// Заменяем плейсхолдер на обработанное значение в finalQuery
+			esc_v := my.escapeValue(prm_v)
+			dbg = strings.ReplaceAll(dbg, placeholder, esc_v)
+		}
+	}
+
+	return sql, params, dbg
+}
+
+// Экранирует значение для подстановки в SQL запрос.
 // Для числовых значений возвращает строку без кавычек, для остальных - с кавычками и экранированием.
-func (my *My) V(value interface{}) string {
-	s := fmt.Sprintf("%v", value)
-	if my.isDecimalNumber(s) {
+func (my *My) escapeValue(x any) string {
+	s := fmt.Sprintf("%v", x)
+	if my.isDecimal(s) {
 		return s
 	}
 	// Экранирование специальных символов MySQL
@@ -195,9 +254,9 @@ func (my *My) V(value interface{}) string {
 	return "'" + escaped + "'"
 }
 
-// isDecimalNumber проверяет, является ли строка десятичным числом (целым или с плавающей точкой).
+// Проверяет, является ли строка десятичным числом (целым или с плавающей точкой).
 // Допускается знак + или - в начале и одна точка.
-func (my *My) isDecimalNumber(s string) bool {
+func (my *My) isDecimal(s string) bool {
 	if len(s) == 0 {
 		return false
 	}
@@ -225,10 +284,10 @@ func (my *My) isDecimalNumber(s string) bool {
 	return hasDigit
 }
 
-// logSQL логирует ошибку SQL запроса с цветным выводом (использует ANSI коды).
+// Логирует ошибку SQL запроса с цветным выводом (использует ANSI коды).
 func logSQL(err error, q string) {
 	const red = "\033[31m"
 	const reset = "\033[0m"
 	log.Printf("%s[sql]%s\n%s", red, reset, err)
-	log.Printf("%s--%s\n%s\n", red, reset, strings.TrimSpace(q))
+	log.Printf("%s[dbg]%s\n%s", red, reset, q)
 }
