@@ -70,9 +70,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Регистрируем нового клиента в хранилище
-	clientUUID := clientStore.Add(conn)
-
-	log.Printf("Новое подключение: %s, UUID: %s", r.RemoteAddr, clientUUID)
+	cid := clientStore.Add(conn)
+	log.Printf("Новое подключение: %s, UUID: %s", r.RemoteAddr, cid)
 
 	// Отправляем приветственное сообщение
 	conn.WriteMessage(websocket.TextMessage, []byte("Добро пожаловать в чат!"))
