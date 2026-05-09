@@ -53,10 +53,7 @@ func main() {
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 
-	// WebSocket ручка блокирующая
-	// http.HandleFunc("/ws", handleWebSocket)
-
-	// WebSocket ручка с отдельным потоком
+	// WebSocket ручка с горутиной
 	http.HandleFunc("/ws", handleGoWebSocket)
 
 	log.Printf("Сервер запущен на http://localhost:%s", port)
