@@ -112,7 +112,9 @@ func handleGoWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Очистка после завершения горутины
 	ws.Remove(conn)
 	log.Printf("Отключение (горутина): %s", r.RemoteAddr)
+
 	// Рассылаем уведомление об отключении
 	ws.Broadcast([]byte("Пользователь покинул чат (горутина)"), nil)
+
 	conn.Close()
 }
