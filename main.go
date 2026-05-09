@@ -79,7 +79,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Рассылаем уведомление о новом пользователе всем клиентам
 	ws.Broadcast([]byte("Пользователь присоединился к чату"), conn)
 
-	// Читаем сообщения от клиента
+	// Читаем сообщения от клиента в бесконечном цикле
 	for {
 		messageType, p, err := conn.ReadMessage()
 		if err != nil {
