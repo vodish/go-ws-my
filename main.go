@@ -53,55 +53,115 @@ func main() {
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 
-	// WebSocket ручка
-	http.HandleFunc("/ws", handleWebSocket)
+	// WebSocket ручка блокирующая
+	// http.HandleFunc("/ws", handleWebSocket)
+
+	// WebSocket ручка с отдельным потоком
+	http.HandleFunc("/ws", handleGoWebSocket)
 
 	log.Printf("Сервер запущен на http://localhost:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-// Обработчик вебсокета
-func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+// Обработчик вебсокета с отдельной горутиной для обработки сообщений
+func handleGoWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Ошибка при обновлении до WebSocket:", err)
 		return
 	}
-	defer conn.Close()
 
 	// Регистрируем нового клиента в хранилище
 	cid := ws.Add(conn)
-	log.Printf("Новое подключение: %s, UUID: %s", r.RemoteAddr, cid)
+	log.Printf("Новое подключение (горутина): %s, UUID: %s", r.RemoteAddr, cid)
 
 	// Отправляем приветственное сообщение
-	conn.WriteMessage(websocket.TextMessage, []byte("Добро пожаловать в чат!"))
+	conn.WriteMessage(websocket.TextMessage, []byte("Добро пожаловать в чат (горутина)!"))
 
 	// Рассылаем уведомление о новом пользователе всем клиентам
-	ws.Broadcast([]byte("Пользователь присоединился к чату"), conn)
+	ws.Broadcast([]byte("Пользователь присоединился к чату (горутина)"), conn)
 
-	// Читаем сообщения от клиента в бесконечном цикле
-	for {
-		messageType, p, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("Ошибка чтения: %v", err)
-			break
+	// Создаем канал для сигнала завершения горутины
+	done := make(chan bool)
+
+	// Запускаем горутину для обработки сообщений от клиента
+	go func() {
+		// Только сигнал о завершении
+		defer func() { done <- true }()
+
+		// Читаем сообщения от клиента в бесконечном цикле
+		for {
+			messageType, p, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("Ошибка чтения (горутина): %v", err)
+				break
+			}
+
+			// log.Printf("Получено сообщение от %s (горутина): %s", r.RemoteAddr, string(p))
+
+			// Рассылаем сообщение всем клиентам, кроме отправителя
+			ws.Broadcast(p, conn)
+
+			// Эхо-ответ (опционально)
+			if messageType == websocket.TextMessage {
+				// conn.WriteMessage(websocket.TextMessage, []byte("Сообщение доставлено (горутина)"))
+			}
 		}
+	}()
 
-		log.Printf("Получено сообщение от %s: %s", r.RemoteAddr, string(p))
+	// Ждем завершения горутины
+	<-done
 
-		// Рассылаем сообщение всем клиентам, кроме отправителя
-		ws.Broadcast(p, conn)
-
-		// Эхо-ответ (опционально)
-		if messageType == websocket.TextMessage {
-			conn.WriteMessage(websocket.TextMessage, []byte("Сообщение доставлено"))
-		}
-	}
-
-	// Удаляем клиента при отключении
+	// Очистка после завершения горутины
 	ws.Remove(conn)
-
-	log.Printf("Отключение: %s", r.RemoteAddr)
+	log.Printf("Отключение (горутина): %s", r.RemoteAddr)
 	// Рассылаем уведомление об отключении
-	ws.Broadcast([]byte("Пользователь покинул чат"), nil)
+	ws.Broadcast([]byte("Пользователь покинул чат (горутина)"), nil)
+	conn.Close()
 }
+
+// Обрабатывает соединение в текущей горутине (блокирующее чтение)
+// func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+// 	conn, err := upgrader.Upgrade(w, r, nil)
+// 	if err != nil {
+// 		log.Println("Ошибка при обновлении до WebSocket:", err)
+// 		return
+// 	}
+// 	defer conn.Close()
+
+// 	// Регистрируем нового клиента в хранилище
+// 	cid := ws.Add(conn)
+// 	log.Printf("Новое подключение: %s, UUID: %s", r.RemoteAddr, cid)
+
+// 	// Отправляем приветственное сообщение
+// 	conn.WriteMessage(websocket.TextMessage, []byte("Добро пожаловать в чат!"))
+
+// 	// Рассылаем уведомление о новом пользователе всем клиентам
+// 	ws.Broadcast([]byte("Пользователь присоединился к чату"), conn)
+
+// 	// Читаем сообщения от клиента в бесконечном цикле (блокирующее чтение)
+// 	for {
+// 		messageType, p, err := conn.ReadMessage()
+// 		if err != nil {
+// 			log.Printf("Ошибка чтения: %v", err)
+// 			break
+// 		}
+
+// 		log.Printf("Получено сообщение от %s: %s", r.RemoteAddr, string(p))
+
+// 		// Рассылаем сообщение всем клиентам, кроме отправителя
+// 		ws.Broadcast(p, conn)
+
+// 		// Эхо-ответ (опционально)
+// 		if messageType == websocket.TextMessage {
+// 			conn.WriteMessage(websocket.TextMessage, []byte("Сообщение доставлено"))
+// 		}
+// 	}
+
+// 	// Удаляем клиента при отключении
+// 	ws.Remove(conn)
+
+// 	log.Printf("Отключение: %s", r.RemoteAddr)
+// 	// Рассылаем уведомление об отключении
+// 	ws.Broadcast([]byte("Пользователь покинул чат"), nil)
+// }
